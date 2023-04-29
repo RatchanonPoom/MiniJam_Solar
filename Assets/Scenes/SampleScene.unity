@@ -895,10 +895,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f98738af6965d04e90cafb92d83615b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  surfaceVelocity: 10
   planet: {fileID: 647599907}
-  sphericalCoord: {x: 0, y: 0, z: 0.5}
   currentPositionInPlanetSpace: {x: 0, y: 0, z: 0}
+  isControllable: 0
+  surfaceVelocity: 10
 --- !u!114 &618429639
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2520,8 +2520,9 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
+  controllableCreature: {fileID: 618429638}
   recordInterval: 0.25
-  test_ghostTemplate: {fileID: 2036866944}
+  test_ghostTemplate: {fileID: 618429637}
   test_ghostPlanet: {fileID: 647599907}
 --- !u!4 &1933566838
 Transform:
