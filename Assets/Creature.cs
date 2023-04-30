@@ -7,14 +7,19 @@ public class Creature : MonoBehaviour
 {
     [SerializeField] Transform planet;
     public Vector3 currentPositionInPlanetSpace;
+    public float bornTime;
 
     [SerializeField] bool isControllable;
-    private float bornTime;
     private CreatureHistory history;
 
     //Auto Behaviour Parameter
     bool isAlive;
     [SerializeField] float surfaceVelocity;
+    [SerializeField] float growthRate;
+    [SerializeField] float bornLifeExpectancy;
+
+    [SerializeField]private float _lifeExpectancy;
+    [SerializeField]private float _growth;
 
     #region Input System Messages
 
@@ -72,27 +77,32 @@ public class Creature : MonoBehaviour
 
     public void InitializedCreature()
     {
+        BornCreature();
+
         isControllable = true;
 
-        HistoryController.instance.StartRecording(this);
+        MoveWithPlayerInput();
 
-        BornCreature();
+        HistoryController.instance.StartRecording(this);
     }
 
     public void InitializedCreature(CreatureHistory history)
     {
+        BornCreature();
+
         isControllable = false;
 
         this.history = history;
 
         this.transform.localPosition = history.bornPosition;
-
-        BornCreature();
     }
 
     private void BornCreature()
     {
         bornTime = Time.time;
+
+        _lifeExpectancy = bornLifeExpectancy;
+        _growth = 0;
     }
 
     private void MoveWithRecording()
@@ -100,20 +110,45 @@ public class Creature : MonoBehaviour
         this.transform.localPosition = history.RecordedPosition(Time.time - bornTime);
     }
 
-    private void Update()
+    private void Action_Interact()
+    {
+
+    }
+
+    private void FixedUpdate()
     {
         if (isControllable)
             MoveWithPlayerInput();
         else
             MoveWithRecording();
 
+        //Auto Behaviour
+        _lifeExpectancy -= Time.fixedDeltaTime;
+        _growth += Time.fixedDeltaTime;
+
+        if (_lifeExpectancy <= 0)
+            Expire();
+
         //align with planet surface
         this.transform.LookAt(planet, this.transform.TransformDirection(Vector3.up));
     }
 
+    /// <summary>
+    /// for testing only, should never been called in the game
+    /// </summary>
+    public void ForceExpire()
+    {
+        Debug.Log($"CREATURE {name}'s FATE COME TO A PREMATURE END");
+
+        Expire();
+    }
+
     private void Expire()
     {
+        if (isControllable)
+            HistoryController.instance.EndCycle();
 
+        this.gameObject.SetActive(false);
     }
 
     private void OnDrawGizmos()

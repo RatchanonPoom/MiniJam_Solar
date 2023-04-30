@@ -12,6 +12,16 @@ public struct CreatureHistory
     public AnimationCurve Ypos;
     public AnimationCurve Zpos;
 
+    public CreatureHistory(Creature origin)
+    {
+        this.bornPosition = origin.currentPositionInPlanetSpace;
+        this.bornTime = Time.time;
+
+        Xpos = new AnimationCurve();
+        Ypos = new AnimationCurve();
+        Zpos = new AnimationCurve();
+    }
+
     public void SmoothRecordedCurve(float weight)
     {
         for (int i = 0; i < Xpos.length; i++)
@@ -46,11 +56,16 @@ public class HistoryController : MonoBehaviour
         }
     }
 
-    public CreatureHistory tmp_currentCreature;
-    [SerializeField] Creature controllableCreature;
-
+    [SerializeField] private List<CreatureHistory> creaturesHistory;
 
     [SerializeField] float recordInterval = 1;
+
+    [SerializeField] private CreatureHistory tmp_currentCreatureHistory;
+    [SerializeField] private Creature controllableCreature;
+    [SerializeField] Vector3 nextControllableBornPos;
+
+    [SerializeField] private List<Creature> tmp_currentNonControllableCreatures;
+
 
     //private CreatureHistory test_runningHistory;
     //private Transform test_ghost;
@@ -70,19 +85,24 @@ public class HistoryController : MonoBehaviour
         else
             Debug.LogWarning($"this gameobject \"{this.name}\" contains a duplicate instance of HistoryController");
 
-        controllableCreature.InitializedCreature();
+        creaturesHistory = new List<CreatureHistory>();
+    }
+
+    private void Start()
+    {
+        BeginCycle();
     }
 
     private void Update()
     {
         if (Input.GetKeyDown(KeyCode.Backslash))
         {
-            tmp_currentCreature.SmoothRecordedCurve(0);
+            tmp_currentCreatureHistory.SmoothRecordedCurve(0);
         }
 
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            CreateGhost(tmp_currentCreature);
+            BeginCycle();
         }
 
         //if (test_ghost != null)
@@ -91,7 +111,64 @@ public class HistoryController : MonoBehaviour
         //}
     }
 
-    public void CreateGhost(CreatureHistory history)
+    private void BeginCycle()
+    {
+        Debug.Log("A NEW CYCLE BEGINS");
+
+        //Create ghosts
+        tmp_currentNonControllableCreatures = new List<Creature>();
+        foreach (var pastCreature in creaturesHistory)
+        {
+            tmp_currentNonControllableCreatures.Add(CreateGhost(pastCreature));
+        }
+
+        //Craete new controllable creature
+        controllableCreature = CreateControllableCreature(nextControllableBornPos);
+    }
+
+    Coroutine routine_restartCycle;
+    public void EndCycle()
+    {
+        StopRecording();
+
+        foreach (var creature in tmp_currentNonControllableCreatures)
+        {
+            creature.ForceExpire();
+        }
+
+        //tmp_record last position
+        nextControllableBornPos = controllableCreature.currentPositionInPlanetSpace;
+
+        controllableCreature = null;
+
+        routine_restartCycle = StartCoroutine(RoutineRestartCycle());
+    }
+
+    private IEnumerator RoutineRestartCycle()
+    {
+        Debug.Log("THE CYCLE HAS COME TO A PREMATURE END");
+
+        yield return new WaitForSeconds(3);
+
+        BeginCycle();
+    }
+
+    private Creature CreateControllableCreature(Vector3 bornPos)
+    {
+        Creature creature = GameObject.Instantiate(test_ghostTemplate, test_ghostPlanet).GetComponent<Creature>();
+
+        creature.transform.position = test_ghostPlanet.TransformPoint(bornPos);
+
+        creature.InitializedCreature();
+
+        creature.gameObject.SetActive(true);
+
+        Debug.Log($"a controllable creature {creature.name} has been recreated");
+
+        return creature;
+    }
+
+    private Creature CreateGhost(CreatureHistory history)
     {
         //test_runningHistory = history;
         /*test_ghost = */
@@ -99,24 +176,44 @@ public class HistoryController : MonoBehaviour
 
         creature.InitializedCreature(history);
 
+        creature.gameObject.SetActive(true);
+
         //test_ghost.localPosition = test_runningHistory.bornPosition;
 
         //test_ghostCreatTime = Time.time;
+        Debug.Log($"creature {creature.name} has been recreated");
+
+        return creature;
     }
+
+    Coroutine routine_creatureHistoryRecording;
 
     public void StartRecording(Creature creature)
     {
         controllableCreature = creature;
 
-        StartCoroutine(RecordCurrentCreatureHistoryUntilExpire());
+        //record history
+        tmp_currentCreatureHistory = new CreatureHistory(creature);
+        routine_creatureHistoryRecording = StartCoroutine(RecordCurrentCreatureHistoryUntilExpire());
     }
 
     IEnumerator RecordCurrentCreatureHistoryUntilExpire()
     {
+        float timeAtStartOfRecording = controllableCreature.bornTime;
+
         while (true)
         {
             yield return new WaitForSeconds(recordInterval);
-            tmp_currentCreature.RecordPosition(Time.time, controllableCreature.currentPositionInPlanetSpace);
+            yield return new WaitForFixedUpdate();
+            tmp_currentCreatureHistory.RecordPosition(Time.time - timeAtStartOfRecording, controllableCreature.currentPositionInPlanetSpace);
         }
+    }
+
+    private void StopRecording()
+    {
+        StopCoroutine(routine_creatureHistoryRecording);
+
+        //add to world history
+        creaturesHistory.Add(tmp_currentCreatureHistory);
     }
 }
