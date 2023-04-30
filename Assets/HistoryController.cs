@@ -2,15 +2,32 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+
+
 [System.Serializable]
 public struct CreatureHistory
 {
+    [System.Serializable]
+    public struct CreatureActionLogEntry
+    {
+        public float actionTime;
+        public int actionType;
+
+        public CreatureActionLogEntry(float time, int type)
+        {
+            actionTime = time;
+            actionType = type;
+        }
+    }
+
     public Vector3 bornPosition;
     public float bornTime;
 
     public AnimationCurve Xpos;
     public AnimationCurve Ypos;
     public AnimationCurve Zpos;
+
+    public List<CreatureActionLogEntry> actionLog;
 
     public CreatureHistory(Creature origin)
     {
@@ -20,6 +37,8 @@ public struct CreatureHistory
         Xpos = new AnimationCurve();
         Ypos = new AnimationCurve();
         Zpos = new AnimationCurve();
+
+        actionLog = new List<CreatureActionLogEntry>(); 
     }
 
     public void SmoothRecordedCurve(float weight)
@@ -39,7 +58,24 @@ public struct CreatureHistory
         Zpos.AddKey(time, posRelatedToPlanet.z);
     }
 
-    public Vector3 RecordedPosition(float time)
+    public void RecordAction(float time, int type)
+    {
+        actionLog.Add(new CreatureActionLogEntry(time, type));
+    }
+
+    public Queue<CreatureActionLogEntry> GetActionQueue()
+    {
+        Queue<CreatureActionLogEntry> queue = new Queue<CreatureActionLogEntry>();
+
+        foreach (var action in actionLog)
+        {
+            queue.Enqueue(action);
+        }
+
+        return queue;
+    }
+
+    public Vector3 GetRecordedPosition(float time)
     {
         return new Vector3(Xpos.Evaluate(time), Ypos.Evaluate(time), Zpos.Evaluate(time));
     }
@@ -55,6 +91,8 @@ public class HistoryController : MonoBehaviour
             return _historyController;
         }
     }
+
+    private int _cycleCount;
 
     [SerializeField] private List<CreatureHistory> creaturesHistory;
 
@@ -84,6 +122,8 @@ public class HistoryController : MonoBehaviour
         }
         else
             Debug.LogWarning($"this gameobject \"{this.name}\" contains a duplicate instance of HistoryController");
+
+        _cycleCount = 0;
 
         creaturesHistory = new List<CreatureHistory>();
     }
@@ -115,6 +155,8 @@ public class HistoryController : MonoBehaviour
     {
         Debug.Log("A NEW CYCLE BEGINS");
 
+        BroadcastMessage("CycleStart", _cycleCount, SendMessageOptions.DontRequireReceiver);
+
         //Create ghosts
         tmp_currentNonControllableCreatures = new List<Creature>();
         foreach (var pastCreature in creaturesHistory)
@@ -137,7 +179,7 @@ public class HistoryController : MonoBehaviour
         }
 
         //tmp_record last position
-        nextControllableBornPos = controllableCreature.currentPositionInPlanetSpace;
+        //nextControllableBornPos = controllableCreature.currentPositionInPlanetSpace;
 
         controllableCreature = null;
 
@@ -188,6 +230,10 @@ public class HistoryController : MonoBehaviour
 
     Coroutine routine_creatureHistoryRecording;
 
+    /// <summary>
+    /// Start position recording for the currently controlled creature
+    /// </summary>
+    /// <param name="creature"></param>
     public void StartRecording(Creature creature)
     {
         controllableCreature = creature;
@@ -195,6 +241,14 @@ public class HistoryController : MonoBehaviour
         //record history
         tmp_currentCreatureHistory = new CreatureHistory(creature);
         routine_creatureHistoryRecording = StartCoroutine(RecordCurrentCreatureHistoryUntilExpire());
+    }
+
+    /// <summary>
+    /// Record an action into the currently controlled creature history
+    /// </summary>
+    public void RecordCurrentCreatureAction(int type)
+    {
+        tmp_currentCreatureHistory.RecordAction(Time.time - controllableCreature.bornTime, type);
     }
 
     IEnumerator RecordCurrentCreatureHistoryUntilExpire()

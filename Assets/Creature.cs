@@ -8,15 +8,20 @@ public class Creature : MonoBehaviour
     [SerializeField] Transform planet;
     public Vector3 currentPositionInPlanetSpace;
     public float bornTime;
+    private bool _isAlive;
+
+    public bool isAlive { get { return _isAlive; } }
 
     [SerializeField] bool isControllable;
     private CreatureHistory history;
 
     //Auto Behaviour Parameter
-    bool isAlive;
     [SerializeField] float surfaceVelocity;
     [SerializeField] float growthRate;
     [SerializeField] float bornLifeExpectancy;
+
+    private Interactable_Base _interactTarget;
+    public Interactable_Base interactTarget { set { _interactTarget = value; } }
 
     [SerializeField]private float _lifeExpectancy;
     [SerializeField]private float _growth;
@@ -28,6 +33,12 @@ public class Creature : MonoBehaviour
     {
         _input = value.Get<Vector2>();
     }
+
+    private void OnAction()
+    {
+        AttempInteract();
+    }
+
     #endregion
 
     #region Player Controlled Behaviour
@@ -94,11 +105,14 @@ public class Creature : MonoBehaviour
 
         this.history = history;
 
+        actionQueue = history.GetActionQueue();
         this.transform.localPosition = history.bornPosition;
     }
 
     private void BornCreature()
     {
+        _isAlive = true;
+
         bornTime = Time.time;
 
         _lifeExpectancy = bornLifeExpectancy;
@@ -107,20 +121,52 @@ public class Creature : MonoBehaviour
 
     private void MoveWithRecording()
     {
-        this.transform.localPosition = history.RecordedPosition(Time.time - bornTime);
+        this.transform.localPosition = history.GetRecordedPosition(Time.time - bornTime);
     }
 
-    private void Action_Interact()
+    private Queue<CreatureHistory.CreatureActionLogEntry> actionQueue;
+    private void InteractWithRecording()
     {
+        if (actionQueue.Count <= 0)
+            return;
 
+        if (Time.time - bornTime >= actionQueue.Peek().actionTime)
+        {
+            AttempInteract();
+            actionQueue.Dequeue();
+        }
+    }
+
+    private void AttempInteract()
+    {
+        Debug.Log($"creature {name} is trying to do something");
+
+        if (_interactTarget == null)
+            return;
+
+        _interactTarget.OnInteract();
+
+        if (isControllable)
+            HistoryController.instance.RecordCurrentCreatureAction(0);
+    }
+
+    public void Feed(float gain)
+    {
+        _lifeExpectancy += gain;
     }
 
     private void FixedUpdate()
     {
         if (isControllable)
+        {
             MoveWithPlayerInput();
+        }
         else
+        {
             MoveWithRecording();
+            InteractWithRecording();
+        }
+            
 
         //Auto Behaviour
         _lifeExpectancy -= Time.fixedDeltaTime;
@@ -145,6 +191,8 @@ public class Creature : MonoBehaviour
 
     private void Expire()
     {
+        _isAlive = false;
+
         if (isControllable)
             HistoryController.instance.EndCycle();
 
